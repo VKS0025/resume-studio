@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Resume Studio
 
-## Getting Started
+A resume builder: fill in your details once, switch between seven layouts live,
+then download the result as a **PDF**, **PNG** or **JPEG**.
 
-First, run the development server:
+Next.js 16 (App Router) · React 19 · Tailwind CSS v4 · Supabase · TypeScript.
+
+## Run it
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3001 (its own port, so it never collides with another local dev server). No configuration is needed — without a Supabase
+project the app stores resumes in the browser's `localStorage`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Accounts and cloud save (optional)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Create a project at [supabase.com](https://supabase.com).
+2. Copy `.env.example` to `.env.local` and fill in:
 
-## Learn More
+   ```
+   NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+3. Run `supabase/migrations/0001_resumes.sql` in the project's SQL editor. It
+   creates the `resumes` table with owner-only row level security.
+4. Restart `npm run dev`. `/login` now works, and any resumes made while signed
+   out are moved into the account on first sign-in.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Email confirmation is on by default in Supabase. Turn it off under
+*Authentication → Providers → Email* if you want sign-up to log straight in.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## How it is put together
 
-## Deploy on Vercel
+| Path | What it does |
+| --- | --- |
+| `src/lib/resume.ts` | The one `ResumeData` shape the editor, every template and the database all share. `normalizeResume()` keeps older saved rows loadable. |
+| `src/lib/export.ts` | PNG / JPEG / PDF rendering. Rasterises the live preview node, then slices that image onto A4 pages for the PDF. |
+| `src/lib/store.ts` | One CRUD interface over Supabase *or* `localStorage`, chosen at call time by whether a session exists. |
+| `src/components/ResumePaper.tsx` | The A4 sheet, laid out at exactly 794 × 1123 px (A4 at 96 dpi) — the size the exporter captures. |
+| `src/components/templates/` | The seven designs. `SectionContent.tsx` holds the shared body markup; each template supplies its own framing. |
+| `src/components/editor/` | The left-hand editor: content forms, design controls, section ordering. |
+| `src/proxy.ts` | Next 16's replacement for middleware. Refreshes the Supabase session cookie; it deliberately does **not** gate any route, so signed-out use keeps working. |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Why the preview is the export
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Both the on-screen sheet and the downloaded file come from the same DOM node at
+the same layout size. Zoom is a CSS transform on a wrapper, so changing it never
+changes the output. Editor-only chrome (the dashed page-break markers) is tagged
+`data-export-ignore` and filtered out at capture time.
+
+### Adding a template
+
+1. Add a component in `src/components/templates/` that takes `{ data }`.
+2. Register it in `src/components/templates/index.tsx` with a name and blurb.
+3. Add its id to the `TemplateId` union in `src/lib/resume.ts`.
+
+The picker thumbnail in `DesignPanel.tsx` falls back to a generic wireframe, so
+a new template works without touching it.
+
+## Scripts
+
+```bash
+npm run dev     # dev server
+npm run build   # production build (also typechecks)
+npm run lint    # eslint
+```
