@@ -68,3 +68,19 @@ npm run dev     # dev server
 npm run build   # production build (also typechecks)
 npm run lint    # eslint
 ```
+
+## Job feed
+
+Listings come from [Adzuna](https://developer.adzuna.com) — Indeed and LinkedIn
+both forbid scraping and actively block it, so neither is a viable source.
+
+`vercel.json` runs `/api/ingest/jobs` once a day at 02:00 UTC. Daily is the most
+frequent schedule Vercel's Hobby plan accepts; on Pro, change `schedule` to
+`0 */6 * * *` for a fresher board. (`vercel.json` rejects unknown keys, so this
+note lives here rather than as a comment in the file.)
+
+Trigger a fill by hand:
+
+```bash
+curl -H "Authorization: Bearer $INGEST_SECRET" https://<host>/api/ingest/jobs
+```
