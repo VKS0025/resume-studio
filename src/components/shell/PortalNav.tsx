@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { countUnread } from "@/lib/api/notifications";
+import { isCurrentUserAdmin } from "@/lib/api/admin";
 
 const LINKS = [
   { href: "/jobs", label: "Jobs" },
@@ -20,6 +21,7 @@ export default function PortalNav() {
   const [email, setEmail] = useState<string | null>(null);
   const [unread, setUnread] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Every setState here runs inside a promise callback rather than the effect
   // body: the header is subscribing to an external system (the auth session),
@@ -33,8 +35,12 @@ export default function PortalNav() {
       supabase.auth.getUser().then(async ({ data }) => {
         if (cancelled) return;
         setEmail(data.user?.email ?? null);
-        const count = data.user ? await countUnread() : 0;
-        if (!cancelled) setUnread(count);
+        const [count, admin] = data.user
+          ? await Promise.all([countUnread(), isCurrentUserAdmin()])
+          : [0, false];
+        if (cancelled) return;
+        setUnread(count);
+        setIsAdmin(admin);
       });
     };
 
@@ -125,6 +131,12 @@ export default function PortalNav() {
                       className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
                       My resumes
                     </Link>
+                    {isAdmin ? (
+                      <Link href="/admin" onClick={() => setMenuOpen(false)}
+                        className="block border-t border-slate-100 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50">
+                        Admin panel
+                      </Link>
+                    ) : null}
                     <button
                       type="button"
                       onClick={signOut}
