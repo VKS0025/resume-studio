@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
     newJobs: 0,
     alertsChecked: 0,
     notificationsCreated: 0,
+    emailsSent: 0,
     errors: [],
   };
 
@@ -68,6 +69,7 @@ export async function GET(request: NextRequest) {
       totals.newJobs += report.newJobs;
       totals.alertsChecked = Math.max(totals.alertsChecked, report.alertsChecked);
       totals.notificationsCreated += report.notificationsCreated;
+      totals.emailsSent += report.emailsSent;
       totals.errors.push(...report.errors);
     } catch (error) {
       totals.errors.push(

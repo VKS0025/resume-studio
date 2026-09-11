@@ -84,3 +84,25 @@ Trigger a fill by hand:
 ```bash
 curl -H "Authorization: Bearer $INGEST_SECRET" https://<host>/api/ingest/jobs
 ```
+
+## Email digests
+
+Alerts always produce an in-app notification. They additionally send an email
+when `RESEND_API_KEY` is set and the student ticked "email me a digest" — the
+checkbox is presented as a preference, so an unconfigured deployment simply
+does nothing rather than promising something it cannot deliver.
+
+Digests are sent by the same ingestion run that creates the notifications, so
+there is no second schedule to manage. Failures are collected into the run's
+report rather than thrown: a bounced address must not cost us the jobs that
+were just ingested.
+
+Prove delivery without waiting for a real match:
+
+```bash
+curl -H "Authorization: Bearer $INGEST_SECRET" \
+     "https://<host>/api/ingest/test-email?to=you@example.com"
+```
+
+That endpoint only sends to an address that already has an account, so a
+leaked secret cannot turn it into a relay.

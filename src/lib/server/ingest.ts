@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NormalizedJob } from "./providers/adzuna";
+import { isEmailConfigured, sendJobDigest } from "./email";
 
 export type IngestReport = {
   fetched: number;
@@ -8,6 +9,7 @@ export type IngestReport = {
   newJobs: number;
   alertsChecked: number;
   notificationsCreated: number;
+  emailsSent: number;
   errors: string[];
 };
 
@@ -28,6 +30,7 @@ export async function ingestJobs(
     newJobs: 0,
     alertsChecked: 0,
     notificationsCreated: 0,
+    emailsSent: 0,
     errors: [],
   };
   if (jobs.length === 0) return report;
@@ -82,6 +85,7 @@ type AlertRow = {
   id: string;
   user_id: string;
   label: string;
+  email_digest: boolean;
   keywords: string;
   location: string;
   sector: string | null;
@@ -118,7 +122,7 @@ async function notifyMatchingAlerts(
 
   const { data: alerts, error } = await admin
     .from("job_alerts")
-    .select("id,user_id,label,keywords,location,sector,employment_type,last_matched_at")
+    .select("id,user_id,label,keywords,location,sector,employment_type,email_digest,last_matched_at")
     .eq("is_active", true);
 
   if (error) {
@@ -129,10 +133,12 @@ async function notifyMatchingAlerts(
   if (!alerts || alerts.length === 0) return;
 
   const notifications: Record<string, unknown>[] = [];
+  const digests: { alert: AlertRow; hits: MatchableJob[] }[] = [];
 
   for (const alert of alerts as AlertRow[]) {
     const hits = jobs.filter((job) => matches(job, alert));
     if (hits.length === 0) continue;
+    if (alert.email_digest) digests.push({ alert, hits });
 
     // One notification per alert per run, not one per job — a feed that
     // returns 40 matches should not produce 40 rows in someone's inbox.
@@ -172,4 +178,55 @@ async function notifyMatchingAlerts(
       "id",
       (alerts as AlertRow[]).map((alert) => alert.id)
     );
+
+  await sendDigests(admin, digests, report);
+}
+
+/**
+ * Emails the students who asked for a digest.
+ *
+ * Runs after the notifications are committed, and every failure is recorded
+ * rather than thrown: a bounced address or a rate-limited provider must not
+ * cost us the job rows we just ingested.
+ */
+async function sendDigests(
+  admin: SupabaseClient,
+  digests: { alert: AlertRow; hits: MatchableJob[] }[],
+  report: IngestReport
+): Promise<void> {
+  if (digests.length === 0) return;
+  if (!isEmailConfigured()) {
+    report.errors.push(
+      "email: RESEND_API_KEY not set, so digest emails were skipped (in-app notifications still sent)."
+    );
+    return;
+  }
+
+  // One address lookup per user, not per alert — someone with four alerts is
+  // still one person.
+  const emailByUser = new Map<string, string | null>();
+
+  for (const { alert, hits } of digests) {
+    if (!emailByUser.has(alert.user_id)) {
+      const { data, error } = await admin.auth.admin.getUserById(alert.user_id);
+      emailByUser.set(alert.user_id, error ? null : (data.user?.email ?? null));
+    }
+    const to = emailByUser.get(alert.user_id);
+    if (!to) continue;
+
+    const result = await sendJobDigest({
+      to,
+      alertLabel: alert.label,
+      // A digest is a nudge to come and look, not a full listing dump.
+      jobs: hits.slice(0, 8).map((job) => ({
+        id: job.id,
+        title: job.title,
+        company: job.company,
+        location: job.location,
+      })),
+    });
+
+    if (result.ok) report.emailsSent += 1;
+    else report.errors.push(`email(${alert.label}): ${result.error}`);
+  }
 }
