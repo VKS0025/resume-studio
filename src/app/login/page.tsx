@@ -16,6 +16,15 @@ export default function LoginPage() {
   );
 }
 
+/** Why the user was bounced back here, in words they can act on. */
+const REASONS: Record<string, string> = {
+  expired: "Your session expired. Please sign in again.",
+  link_expired:
+    "That confirmation link has expired or was already used. Sign in below, or sign up again to get a fresh one.",
+  link_invalid: "That link was incomplete. Try signing in below.",
+  not_configured: "Accounts are not configured on this deployment yet.",
+};
+
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
@@ -26,9 +35,7 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(
-    reason === "expired" ? "Your session expired. Please sign in again." : null
-  );
+  const [message, setMessage] = useState<string | null>(REASONS[reason ?? ""] ?? null);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: React.FormEvent) {
@@ -45,7 +52,15 @@ function LoginForm() {
 
     try {
       if (mode === "signup") {
-        const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            // Without this the link uses the project's Site URL, which points
+            // at localhost by default — the confirmation then lands nowhere.
+            emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+          },
+        });
         if (signUpError) throw signUpError;
         // With email confirmation on, Supabase returns a user but no session.
         if (!data.session) {
