@@ -2,8 +2,9 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
+      "//": "Daily is the most frequent schedule the Hobby plan allows. On Pro this can go to '0 */6 * * *' for a fresher board.",
       "path": "/api/ingest/jobs",
-      "schedule": "0 */6 * * *"
+      "schedule": "0 2 * * *"
     }
   ]
 }
