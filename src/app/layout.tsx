@@ -21,9 +21,12 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Resume Studio — build and download a resume",
+  title: {
+    default: "CareerSetu — jobs, study material and resumes for students",
+    template: "%s — CareerSetu",
+  },
   description:
-    "Build a resume from seven templates and download it as PDF, PNG or JPEG. Free, no watermark.",
+    "Government and private job notifications, job alerts, organised study material, and a resume builder that exports to PDF, PNG or JPEG. Free for students.",
 };
 
 export default function RootLayout({
